@@ -279,8 +279,13 @@ class Ship24Adapter:
 class Ship24Backend:
     """Backend implementation that App Layer uses."""
 
-    def __init__(self, client: "Ship24Client", adapter: Ship24Adapter):
-        """Initialize backend with client and adapter."""
+    def __init__(self, client, adapter: Ship24Adapter):
+        """Initialize backend with client and adapter.
+        
+        Args:
+            client: Ship24Client instance
+            adapter: Ship24Adapter instance
+        """
         self._client = client
         self._adapter = adapter
 
