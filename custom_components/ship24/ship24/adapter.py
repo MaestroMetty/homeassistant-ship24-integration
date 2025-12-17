@@ -339,5 +339,5 @@ class Ship24Backend:
 
     async def process_webhook(self, payload: dict) -> Optional[PackageData]:
         """Process webhook payload."""
-        return self._adapter.process_webhook(payload)
+        return await self._adapter.process_webhook(payload)
 
