@@ -55,12 +55,8 @@ async def async_setup_entry(
     @callback
     def async_add_sensor(tracking_number: str) -> None:
         """Add sensor for a tracking number."""
-        # Check if sensor already exists
-        entity_registry = er.async_get(hass)
-        unique_id = f"{DOMAIN}_{tracking_number}"
-        if entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id):
-            return  # Entity already exists
-        
+        # Always create the sensor - Home Assistant will handle deduplication
+        # This ensures sensors are recreated during reload even if they exist in registry
         sensor = Ship24PackageSensor(coordinator, tracking_number)
         async_add_entities([sensor])
     
@@ -84,11 +80,21 @@ async def async_setup_entry(
     logging_sensor = Ship24LoggingSensor(coordinator)
     async_add_entities([logging_sensor])
 
-    # Check alignment between tracked list and existing sensors on startup
-    entity_registry = er.async_get(hass)
+    # Get tracked numbers and create sensors for all of them
+    # This ensures sensors are always created during setup/reload
     tracked_numbers = coordinator.get_tracking_numbers()
     
-    # Get all existing sensors for this device
+    if tracked_numbers:
+        _LOGGER.info("Creating sensors for %d tracked packages: %s", len(tracked_numbers), tracked_numbers)
+        # Create sensors for all tracked numbers
+        sensors_to_add = []
+        for tracking_number in tracked_numbers:
+            sensors_to_add.append(Ship24PackageSensor(coordinator, tracking_number))
+        async_add_entities(sensors_to_add)
+    
+    # Check for orphaned sensors (entities in registry but not in tracked list)
+    # This handles cleanup of manually removed tracking numbers
+    entity_registry = er.async_get(hass)
     existing_entity_ids = []
     for entity_entry in entity_registry.entities.values():
         if entity_entry.platform == DOMAIN and entity_entry.domain == "sensor":
@@ -99,17 +105,10 @@ async def async_setup_entry(
                 if tracking_num != "logging":
                     existing_entity_ids.append(tracking_num)
     
-    # Find missing sensors (in tracked list but no entity)
-    missing_sensors = tracked_numbers - set(existing_entity_ids)
-    if missing_sensors:
-        _LOGGER.info("Found %d missing sensors on startup, creating them: %s", len(missing_sensors), missing_sensors)
-        for tracking_number in missing_sensors:
-            async_add_sensor(tracking_number)
-    
     # Find orphaned sensors (entity exists but not in tracked list)
     orphaned_sensors = set(existing_entity_ids) - tracked_numbers
     if orphaned_sensors:
-        _LOGGER.info("Found %d orphaned sensors on startup, removing them: %s", len(orphaned_sensors), orphaned_sensors)
+        _LOGGER.info("Found %d orphaned sensors, removing them: %s", len(orphaned_sensors), orphaned_sensors)
         for tracking_number in orphaned_sensors:
             async_remove_sensor(tracking_number)
 
