@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -76,7 +76,7 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Ship24 package sensor."""
 
     _attr_has_entity_name = True
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = None  # Text-based sensor, not numeric
 
     def __init__(
         self, coordinator: Ship24DataUpdateCoordinator, tracking_number: str
