@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, webhook
 from homeassistant.helpers.typing import ConfigType
 
 from .app.api import ParcelTrackingAPI
@@ -55,7 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register webhook if webhook_id is set
     if webhook_id:
-        webhook_url = hass.components.webhook.async_generate_url(webhook_id)
+        webhook_url = webhook.async_generate_url(hass, webhook_id)
         webhook_id_from_api = await api.register_webhook(webhook_url)
         if webhook_id_from_api:
             _LOGGER.info("Registered webhook: %s", webhook_url)
@@ -64,8 +64,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register webhook handler
     if webhook_id:
-        hass.components.webhook.async_register(
-            DOMAIN, f"Ship24 {entry.title}", webhook_id, async_handle_webhook
+        webhook.async_register(
+            hass, DOMAIN, f"Ship24 {entry.title}", webhook_id, async_handle_webhook
         )
 
     # Forward entry setup to platforms (this will call async_setup_entry in sensor.py)
@@ -116,7 +116,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Unregister webhook
         webhook_id = entry.data.get(CONF_WEBHOOK_ID)
         if webhook_id:
-            hass.components.webhook.async_unregister(webhook_id)
+            webhook.async_unregister(hass, webhook_id)
 
         # Delete webhook from Ship24
         domain_data = hass.data[DOMAIN].get(entry.entry_id, {})

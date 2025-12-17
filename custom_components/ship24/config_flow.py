@@ -9,6 +9,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import webhook
 
 from .const import CONF_API_KEY, CONF_WEBHOOK_ID, DOMAIN
 
@@ -68,7 +69,7 @@ class Ship24ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         # Generate webhook ID
-        webhook_id = self.hass.components.webhook.async_generate_id()
+        webhook_id = webhook.async_generate_id()
 
         return self.async_create_entry(
             title="Ship24 Package Tracking",
