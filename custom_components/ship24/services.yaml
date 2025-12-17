@@ -1,0 +1,29 @@
+add_tracking:
+  name: Add Tracking
+  description: Add a new package tracking number to monitor.
+  fields:
+    tracking_number:
+      name: Tracking Number
+      description: The tracking number to add.
+      required: true
+      selector:
+        text: {}
+    custom_name:
+      name: Custom Name
+      description: Optional custom name for this package.
+      required: false
+      selector:
+        text: {}
+
+
+remove_tracking:
+  name: Remove Tracking
+  description: Remove a package tracking number from monitoring.
+  fields:
+    tracking_number:
+      name: Tracking Number
+      description: The tracking number to remove.
+      required: true
+      selector:
+        text: {}
+
