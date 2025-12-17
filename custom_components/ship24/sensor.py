@@ -48,6 +48,7 @@ async def async_setup_entry(
 
     # Store the async_add_entities callback for dynamic entity creation
     coordinator._async_add_entities = async_add_entities
+    coordinator.hass = hass  # Store hass reference for entity removal
 
     @callback
     def async_add_sensor(tracking_number: str) -> None:
@@ -60,6 +61,18 @@ async def async_setup_entry(
         
         sensor = Ship24PackageSensor(coordinator, tracking_number)
         async_add_entities([sensor])
+    
+    @callback
+    def async_remove_sensor(tracking_number: str) -> None:
+        """Remove sensor for a tracking number."""
+        entity_registry = er.async_get(hass)
+        unique_id = f"{DOMAIN}_{tracking_number}"
+        entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if entity_id:
+            entity_registry.async_remove(entity_id)
+    
+    # Store remove callback
+    coordinator._async_remove_entity = async_remove_sensor
 
     # Add sensors for existing packages
     tracking_numbers = coordinator.get_tracking_numbers()

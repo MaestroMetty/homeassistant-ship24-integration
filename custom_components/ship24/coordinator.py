@@ -117,11 +117,23 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
             True if successful, False otherwise
         """
         try:
-            success = await self.api.remove_tracking(tracking_number)
-            if success:
-                self.remove_tracking_number(tracking_number)
-                await self.async_request_refresh()
-                return True
+            # Check if tracking number exists in our tracking set
+            if tracking_number not in self._tracking_numbers:
+                _LOGGER.warning("Tracking number %s not found in tracking list", tracking_number)
+                return False
+            
+            # Remove from API layer (this only removes from API cache, not Ship24)
+            await self.api.remove_tracking(tracking_number)
+            
+            # Remove from coordinator tracking
+            self.remove_tracking_number(tracking_number)
+            
+            # Remove entity if callback is available
+            if hasattr(self, "_async_remove_entity"):
+                self._async_remove_entity(tracking_number)
+            
+            await self.async_request_refresh()
+            return True
         except Exception as err:
             _LOGGER.error("Error removing tracking %s: %s", tracking_number, err)
         return False
