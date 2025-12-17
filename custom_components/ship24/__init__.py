@@ -84,25 +84,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 webhook_base_url = network.get_url(hass, prefer_external=True, allow_cloud=False)
                 if webhook_base_url:
                     webhook_full_url = f"{webhook_base_url.rstrip('/')}/api/webhook/{webhook_id}"
-                    _LOGGER.info(
-                        "Registered webhook handler with ID: %s\n"
-                        "Configure this URL in your Ship24 dashboard: %s",
-                        webhook_id,
-                        webhook_full_url
-                    )
+                    
+                    # Check if URL appears to be internal (private IP ranges)
+                    is_internal = False
+                    if webhook_base_url.startswith("http://172.") or webhook_base_url.startswith("http://192.168.") or webhook_base_url.startswith("http://10.") or webhook_base_url.startswith("http://127.") or webhook_base_url.startswith("http://169.254."):
+                        is_internal = True
+                    
+                    if is_internal:
+                        _LOGGER.warning(
+                            "Registered webhook handler with ID: %s\n"
+                            "WARNING: The detected webhook URL appears to be an internal IP address:\n"
+                            "  %s\n"
+                            "Ship24's servers cannot reach internal IPs from the internet.\n"
+                            "Please configure an external URL in Home Assistant settings:\n"
+                            "  Settings > System > Network > External URL\n"
+                            "Then use: https://<your-external-url>/api/webhook/%s",
+                            webhook_id,
+                            webhook_full_url,
+                            webhook_id
+                        )
+                    else:
+                        _LOGGER.info(
+                            "Registered webhook handler with ID: %s\n"
+                            "Configure this URL in your Ship24 dashboard: %s",
+                            webhook_id,
+                            webhook_full_url
+                        )
                 else:
                     _LOGGER.info(
                         "Registered webhook handler with ID: %s\n"
-                        "Webhook URL: https://<your-ha-url>/api/webhook/%s",
+                        "No external URL configured. Please set up an external URL in:\n"
+                        "  Settings > System > Network > External URL\n"
+                        "Then use: https://<your-external-url>/api/webhook/%s",
                         webhook_id,
                         webhook_id
                     )
-            except Exception:
+            except Exception as err:
                 _LOGGER.info(
                     "Registered webhook handler with ID: %s\n"
-                    "Webhook URL: https://<your-ha-url>/api/webhook/%s",
+                    "Could not determine webhook URL. Please configure:\n"
+                    "  Settings > System > Network > External URL\n"
+                    "Then use: https://<your-external-url>/api/webhook/%s\n"
+                    "Error: %s",
                     webhook_id,
-                    webhook_id
+                    webhook_id,
+                    err
                 )
         except ValueError as err:
             # ValueError is raised when webhook is already registered
@@ -183,7 +209,13 @@ async def async_handle_webhook(
     This handler receives POST requests from Ship24 when package tracking updates occur.
     The webhook_id matches the ID registered during setup.
     """
-    _LOGGER.info("Webhook handler called with ID: %s", webhook_id)
+    _LOGGER.info(
+        "Webhook handler called with ID: %s | Method: %s | Path: %s | Headers: %s",
+        webhook_id,
+        request.method,
+        request.path,
+        dict(request.headers)
+    )
     try:
         _LOGGER.debug("Received webhook: %s", webhook_id)
 
@@ -218,30 +250,42 @@ async def async_handle_webhook(
         # Parse webhook payload
         try:
             payload = await request.json()
+            _LOGGER.info("Webhook payload received: %s", payload)
         except Exception as err:
             _LOGGER.error("Failed to parse webhook payload: %s", err)
+            # Try to read raw body for debugging
+            try:
+                body = await request.text()
+                _LOGGER.debug("Raw webhook body: %s", body)
+            except Exception:
+                pass
             return web.Response(status=400, text="Invalid payload")
 
         # Process webhook via App Layer
         try:
+            _LOGGER.info("Processing webhook payload via API layer")
             package = await api.process_webhook_payload(payload)
             if package:
                 tracking_number = package.tracking_number
+                _LOGGER.info("Webhook processed successfully. Package tracking number: %s", tracking_number)
                 
                 # Only process webhook if this tracking number is being tracked in Home Assistant
-                if tracking_number not in coordinator.get_tracking_numbers():
-                    _LOGGER.debug(
+                tracked_numbers = coordinator.get_tracking_numbers()
+                _LOGGER.debug("Currently tracked packages: %s", tracked_numbers)
+                if tracking_number not in tracked_numbers:
+                    _LOGGER.info(
                         "Webhook received for untracked package %s. Ignoring (not tracked in Home Assistant).",
                         tracking_number
                     )
                     return web.Response(status=200, text="OK")  # Return OK to avoid retries
                 
-                _LOGGER.info("Webhook update received for tracked package: %s", tracking_number)
+                _LOGGER.info("Webhook update received for tracked package: %s. Triggering refresh.", tracking_number)
                 # Trigger coordinator update to refresh the package
                 await coordinator.async_request_refresh()
+                _LOGGER.info("Coordinator refresh triggered successfully")
                 return web.Response(status=200, text="OK")
             else:
-                _LOGGER.warning("Failed to process webhook payload")
+                _LOGGER.warning("Failed to process webhook payload - package is None")
                 return web.Response(status=200, text="OK")  # Return OK even if processing failed to avoid retries
         except Exception as err:
             _LOGGER.exception("Error processing webhook payload: %s", err)
