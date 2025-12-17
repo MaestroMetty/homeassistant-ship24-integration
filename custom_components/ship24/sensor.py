@@ -69,18 +69,23 @@ async def async_setup_entry(
         unique_id = f"{DOMAIN}_{tracking_number}"
         entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
         if entity_id:
+            # Remove from entity registry (this will also remove from platform)
             entity_registry.async_remove(entity_id)
+            _LOGGER.info("Removed entity %s for tracking number %s", entity_id, tracking_number)
+        else:
+            _LOGGER.warning("Entity not found in registry for tracking number %s (unique_id: %s)", tracking_number, unique_id)
     
     # Store remove callback
     coordinator._async_remove_entity = async_remove_sensor
 
-    # Add sensors for existing packages
+    # Add sensors for existing packages and refresh data on startup
     tracking_numbers = coordinator.get_tracking_numbers()
     if tracking_numbers:
-        # Only refresh if we have tracking numbers
-        await coordinator.async_config_entry_first_refresh()
+        # Create sensors first
         for tracking_number in tracking_numbers:
             async_add_sensor(tracking_number)
+        # Then refresh data (this will update all entities)
+        await coordinator.async_config_entry_first_refresh()
     else:
         # No tracking numbers yet - entities will be created when tracking is added via service
         _LOGGER.info("No tracking numbers configured yet. Use ship24.add_tracking service to add packages.")

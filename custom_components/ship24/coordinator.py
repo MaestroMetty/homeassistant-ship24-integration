@@ -130,9 +130,13 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
             
             # Remove entity if callback is available
             if hasattr(self, "_async_remove_entity"):
-                self._async_remove_entity(tracking_number)
+                try:
+                    self._async_remove_entity(tracking_number)
+                    _LOGGER.info("Removed entity for tracking number %s", tracking_number)
+                except Exception as err:
+                    _LOGGER.error("Failed to remove entity for %s: %s", tracking_number, err)
             
-            await self.async_request_refresh()
+            # Don't refresh after removal - the entity is gone
             return True
         except Exception as err:
             _LOGGER.error("Error removing tracking %s: %s", tracking_number, err)
