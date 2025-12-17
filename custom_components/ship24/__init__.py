@@ -9,8 +9,19 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-import homeassistant.helpers.webhook as webhook
 from homeassistant.helpers.typing import ConfigType
+
+_LOGGER = logging.getLogger(__name__)
+
+# Import webhook components
+try:
+    from homeassistant.components.webhook import async_register, async_unregister
+    WEBHOOK_AVAILABLE = True
+except ImportError:
+    async_register = None
+    async_unregister = None
+    WEBHOOK_AVAILABLE = False
+    _LOGGER.warning("Webhook component not available - webhook functionality will be disabled")
 
 from .app.api import ParcelTrackingAPI
 from .const import (
@@ -23,8 +34,6 @@ from .const import (
 from .coordinator import Ship24DataUpdateCoordinator
 from .ship24.adapter import Ship24Adapter, Ship24Backend
 from .ship24.client import Ship24Client
-
-_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -56,20 +65,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "client": client,
     }
 
-    # Register webhook if webhook_id is set
-    if webhook_id:
-        webhook_url = webhook.async_generate_url(hass, webhook_id)
-        webhook_id_from_api = await api.register_webhook(webhook_url)
-        if webhook_id_from_api:
-            _LOGGER.info("Registered webhook: %s", webhook_url)
-            # Store webhook_id for later use
-            hass.data[DOMAIN][entry.entry_id]["webhook_id"] = webhook_id_from_api
-
-    # Register webhook handler
-    if webhook_id:
-        webhook.async_register(
-            hass, DOMAIN, f"Ship24 {entry.title}", webhook_id, async_handle_webhook
-        )
+    # Register webhook handler if webhook_id is available
+    if webhook_id and WEBHOOK_AVAILABLE:
+        try:
+            async_register(
+                hass,
+                domain=DOMAIN,
+                name=f"Ship24 {entry.title}",
+                webhook_id=webhook_id,
+                handler=async_handle_webhook,
+            )
+            # Generate the webhook URL for the user to configure in Ship24 dashboard
+            try:
+                from homeassistant.helpers import network
+                webhook_base_url = network.get_url(hass, prefer_external=True, allow_cloud=False)
+                if webhook_base_url:
+                    webhook_full_url = f"{webhook_base_url.rstrip('/')}/api/webhook/{webhook_id}"
+                    _LOGGER.info(
+                        "Registered webhook handler with ID: %s\n"
+                        "Configure this URL in your Ship24 dashboard: %s",
+                        webhook_id,
+                        webhook_full_url
+                    )
+                else:
+                    _LOGGER.info(
+                        "Registered webhook handler with ID: %s\n"
+                        "Webhook URL: https://<your-ha-url>/api/webhook/%s",
+                        webhook_id,
+                        webhook_id
+                    )
+            except Exception:
+                _LOGGER.info(
+                    "Registered webhook handler with ID: %s\n"
+                    "Webhook URL: https://<your-ha-url>/api/webhook/%s",
+                    webhook_id,
+                    webhook_id
+                )
+        except Exception as err:
+            _LOGGER.error("Failed to register webhook handler: %s", err)
+    elif webhook_id and not WEBHOOK_AVAILABLE:
+        _LOGGER.warning("Webhook ID provided but webhook component is not available")
 
     # Forward entry setup to platforms (this will call async_setup_entry in sensor.py)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -118,15 +153,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         # Unregister webhook
         webhook_id = entry.data.get(CONF_WEBHOOK_ID)
-        if webhook_id:
-            webhook.async_unregister(hass, webhook_id)
-
-        # Delete webhook from Ship24
-        domain_data = hass.data[DOMAIN].get(entry.entry_id, {})
-        api = domain_data.get("api")
-        webhook_id_from_api = domain_data.get("webhook_id")
-        if api and webhook_id_from_api:
-            await api.delete_webhook(webhook_id_from_api)
+        
+        if webhook_id and WEBHOOK_AVAILABLE:
+            try:
+                async_unregister(hass, webhook_id)
+            except Exception as err:
+                _LOGGER.warning("Failed to unregister webhook: %s", err)
 
         # Clean up
         hass.data[DOMAIN].pop(entry.entry_id)
@@ -137,14 +169,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_handle_webhook(
     hass: HomeAssistant, webhook_id: str, request: web.Request
 ) -> web.Response:
-    """Handle incoming webhook from Ship24."""
+    """Handle incoming webhook from Ship24.
+    
+    This handler receives POST requests from Ship24 when package tracking updates occur.
+    The webhook_id matches the ID registered during setup.
+    """
     try:
         _LOGGER.debug("Received webhook: %s", webhook_id)
 
         # Find the config entry for this webhook
         entry = None
         for config_entry in hass.config_entries.async_entries(DOMAIN):
-            if config_entry.data.get(CONF_WEBHOOK_ID) == webhook_id:
+            stored_webhook_id = config_entry.data.get(CONF_WEBHOOK_ID)
+            if stored_webhook_id == webhook_id:
                 entry = config_entry
                 break
 

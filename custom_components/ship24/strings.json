@@ -3,19 +3,16 @@
     "step": {
       "user": {
         "title": "Ship24 Configuration",
-        "description": "Enter your Ship24 API key to get started.",
+        "description": "Enter your Ship24 API key and optionally a webhook ID.\n\nFor webhooks (optional):\n- Leave webhook ID empty to auto-generate one\n- Or enter a custom webhook ID (e.g., ship24_abc123)\n\nAfter setup, configure the webhook URL in your Ship24 dashboard using the generated webhook ID.",
         "data": {
-          "api_key": "API Key"
+          "api_key": "API Key",
+          "webhook_id": "Webhook ID (optional, auto-generated if empty)"
         }
-      },
-      "webhook": {
-        "title": "Webhook Configuration",
-        "description": "Webhook URL for real-time updates:\n\n{webhook_url}\n\nThis URL will be automatically registered with Ship24.",
-        "data": {}
       }
     },
     "error": {
       "invalid_api_key": "Invalid API key",
+      "invalid_webhook_id": "Webhook ID must contain only letters, numbers, underscores, hyphens, and dots",
       "connection_error": "Unable to connect to Ship24 API",
       "unknown": "Unknown error occurred"
     },

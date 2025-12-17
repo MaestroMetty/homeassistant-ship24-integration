@@ -1,6 +1,7 @@
 """Config flow for Ship24 integration."""
 
 import logging
+import uuid
 from typing import Any
 
 import voluptuous as vol
@@ -9,7 +10,6 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-import homeassistant.helpers.webhook as webhook
 
 from .const import CONF_API_KEY, CONF_WEBHOOK_ID, DOMAIN
 
@@ -18,6 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_API_KEY): str,
+        vol.Optional(CONF_WEBHOOK_ID): str,
     }
 )
 
@@ -68,15 +69,32 @@ class Ship24ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
             )
 
-        # Generate webhook ID
-        webhook_id = webhook.async_generate_id()
+        # Handle webhook configuration
+        # User can provide a webhook ID, or leave it empty to auto-generate one
+        webhook_id_input = user_input.get(CONF_WEBHOOK_ID, "").strip() if user_input.get(CONF_WEBHOOK_ID) else ""
+        
+        if webhook_id_input:
+            # Validate webhook ID (alphanumeric, underscores, hyphens, dots)
+            if webhook_id_input.replace("_", "").replace("-", "").replace(".", "").isalnum():
+                webhook_id = webhook_id_input
+            else:
+                errors["base"] = "invalid_webhook_id"
+                return self.async_show_form(
+                    step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
+                )
+        else:
+            # Generate a unique webhook ID
+            webhook_id = f"ship24_{str(uuid.uuid4()).replace('-', '')[:16]}"
+            _LOGGER.info("Generated webhook ID: %s", webhook_id)
+
+        data = {
+            CONF_API_KEY: user_input[CONF_API_KEY],
+            CONF_WEBHOOK_ID: webhook_id,
+        }
 
         return self.async_create_entry(
             title="Ship24 Package Tracking",
-            data={
-                CONF_API_KEY: user_input[CONF_API_KEY],
-                CONF_WEBHOOK_ID: webhook_id,
-            },
+            data=data,
         )
 
 

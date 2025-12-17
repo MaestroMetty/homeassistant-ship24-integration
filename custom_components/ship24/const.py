@@ -37,7 +37,8 @@ SERVICE_REMOVE_TRACKING = "remove_tracking"
 
 # Config flow
 CONF_API_KEY = "api_key"
-CONF_WEBHOOK_ID = "webhook_id"
+CONF_WEBHOOK_ID = "webhook_id"  # Deprecated, use CONF_WEBHOOK_URL
+CONF_WEBHOOK_URL = "webhook_url"  # Full Home Assistant webhook URL
 
 # Status codes (standardized)
 STATUS_PENDING = "pending"
