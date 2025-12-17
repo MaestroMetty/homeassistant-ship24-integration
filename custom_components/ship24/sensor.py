@@ -6,6 +6,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -52,7 +53,7 @@ async def async_setup_entry(
     def async_add_sensor(tracking_number: str) -> None:
         """Add sensor for a tracking number."""
         # Check if sensor already exists
-        entity_registry = hass.helpers.entity_registry.async_get(hass)
+        entity_registry = er.async_get(hass)
         unique_id = f"{DOMAIN}_{tracking_number}"
         if entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id):
             return  # Entity already exists
