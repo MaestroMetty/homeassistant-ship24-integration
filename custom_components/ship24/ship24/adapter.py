@@ -25,18 +25,40 @@ class Ship24Adapter:
 
     @staticmethod
     def _parse_datetime(date_str: Optional[str]) -> Optional[datetime]:
-        """Parse datetime string from Ship24 format."""
+        """Parse datetime string from Ship24 format.
+        
+        Handles multiple datetime formats:
+        - ISO format with Z (UTC): "2021-04-27T15:09:00.000Z"
+        - ISO format with timezone offset: "2021-04-27T15:09:00+02:00"
+        - ISO format without timezone (assumed UTC): "2021-04-27T15:09:00"
+        - Alternative formats: "2021-04-27 15:09:00", "2021-04-27"
+        """
         if not date_str:
             return None
+        
+        from datetime import timezone
+        
         try:
-            # Ship24 uses ISO format, try parsing
-            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            # Handle ISO format with Z (UTC) - convert to +00:00 format
+            if date_str.endswith("Z"):
+                return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            
+            # Try parsing as ISO format (with or without timezone)
+            dt = datetime.fromisoformat(date_str)
+            # If naive datetime (no timezone), assume UTC
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+            
         except (ValueError, AttributeError):
             try:
                 # Try alternative formats
                 for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"]:
                     try:
-                        return datetime.strptime(date_str, fmt)
+                        dt = datetime.strptime(date_str, fmt)
+                        # Assume UTC for naive datetimes
+                        dt = dt.replace(tzinfo=timezone.utc)
+                        return dt
                     except ValueError:
                         continue
             except Exception:

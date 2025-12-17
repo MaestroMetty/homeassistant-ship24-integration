@@ -215,8 +215,18 @@ async def async_handle_webhook(
         try:
             package = await api.process_webhook_payload(payload)
             if package:
-                _LOGGER.info("Webhook update received for: %s", package.tracking_number)
-                # Trigger coordinator update
+                tracking_number = package.tracking_number
+                
+                # Only process webhook if this tracking number is being tracked in Home Assistant
+                if tracking_number not in coordinator.get_tracking_numbers():
+                    _LOGGER.debug(
+                        "Webhook received for untracked package %s. Ignoring (not tracked in Home Assistant).",
+                        tracking_number
+                    )
+                    return web.Response(status=200, text="OK")  # Return OK to avoid retries
+                
+                _LOGGER.info("Webhook update received for tracked package: %s", tracking_number)
+                # Trigger coordinator update to refresh the package
                 await coordinator.async_request_refresh()
                 return web.Response(status=200, text="OK")
             else:
