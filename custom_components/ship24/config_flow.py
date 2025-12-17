@@ -9,7 +9,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import webhook
+import homeassistant.helpers.webhook as webhook
 
 from .const import CONF_API_KEY, CONF_WEBHOOK_ID, DOMAIN
 
