@@ -78,7 +78,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 webhook_id=webhook_id,
                 handler=async_handle_webhook,
             )
-            # Generate the webhook URL for the user to configure in Ship24 dashboard
+            _LOGGER.info("Registered webhook handler with ID: %s", webhook_id)
+            
+            # Automatically register webhook URL with Ship24 API
             try:
                 from homeassistant.helpers import network
                 webhook_base_url = network.get_url(hass, prefer_external=True, allow_cloud=False)
@@ -92,42 +94,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     
                     if is_internal:
                         _LOGGER.warning(
-                            "Registered webhook handler with ID: %s\n"
-                            "WARNING: The detected webhook URL appears to be an internal IP address:\n"
-                            "  %s\n"
+                            "Webhook URL appears to be an internal IP address: %s\n"
                             "Ship24's servers cannot reach internal IPs from the internet.\n"
                             "Please configure an external URL in Home Assistant settings:\n"
-                            "  Settings > System > Network > External URL\n"
-                            "Then use: https://<your-external-url>/api/webhook/%s",
-                            webhook_id,
-                            webhook_full_url,
-                            webhook_id
-                        )
-                    else:
-                        _LOGGER.info(
-                            "Registered webhook handler with ID: %s\n"
-                            "Configure this URL in your Ship24 dashboard: %s",
-                            webhook_id,
+                            "  Settings > System > Network > External URL",
                             webhook_full_url
                         )
+                    else:
+                        # Automatically register webhook with Ship24 API
+                        _LOGGER.info("Registering webhook URL with Ship24 API: %s", webhook_full_url)
+                        registered_webhook_id = await api.register_webhook(webhook_full_url)
+                        if registered_webhook_id:
+                            _LOGGER.info(
+                                "Successfully registered webhook with Ship24 API. Webhook ID: %s",
+                                registered_webhook_id
+                            )
+                        else:
+                            _LOGGER.warning(
+                                "Failed to register webhook with Ship24 API. "
+                                "The webhook handler is registered locally, but Ship24 may not be able to send updates."
+                            )
                 else:
-                    _LOGGER.info(
-                        "Registered webhook handler with ID: %s\n"
-                        "No external URL configured. Please set up an external URL in:\n"
-                        "  Settings > System > Network > External URL\n"
-                        "Then use: https://<your-external-url>/api/webhook/%s",
-                        webhook_id,
-                        webhook_id
+                    _LOGGER.warning(
+                        "No external URL configured. Cannot register webhook with Ship24 API.\n"
+                        "Please set up an external URL in: Settings > System > Network > External URL"
                     )
             except Exception as err:
-                _LOGGER.info(
-                    "Registered webhook handler with ID: %s\n"
-                    "Could not determine webhook URL. Please configure:\n"
-                    "  Settings > System > Network > External URL\n"
-                    "Then use: https://<your-external-url>/api/webhook/%s\n"
-                    "Error: %s",
-                    webhook_id,
-                    webhook_id,
+                _LOGGER.error(
+                    "Failed to register webhook with Ship24 API: %s\n"
+                    "The webhook handler is registered locally, but automatic registration with Ship24 failed.",
                     err
                 )
         except ValueError as err:
