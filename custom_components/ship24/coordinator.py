@@ -61,41 +61,75 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
         """Get all tracking numbers being monitored."""
         return self._tracking_numbers.copy()
 
+    def _is_retryable_error(self, err: Exception) -> bool:
+        """Check if an error is retryable (transient network error).
+        
+        Args:
+            err: The exception to check
+            
+        Returns:
+            True if the error is retryable, False otherwise
+        """
+        error_str = str(err).lower()
+        retryable_keywords = ['timeout', 'dns', 'connection', 'network', 'resolve', 'cannot connect']
+        return any(keyword in error_str for keyword in retryable_keywords)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Ship24 API via App Layer."""
-        try:
-            packages = {}
-            error_count = 0
-            for tracking_number in list(self._tracking_numbers):
-                try:
-                    package = await self.api.update_package(tracking_number)
-                    if package:
-                        packages[tracking_number] = package
-                except Exception as err:
-                    error_count += 1
-                    error_msg = f"Error updating {tracking_number}: {str(err)}"
+        packages = {}
+        error_count = 0
+        retryable_error_count = 0
+        
+        for tracking_number in list(self._tracking_numbers):
+            try:
+                package = await self.api.update_package(tracking_number)
+                if package:
+                    packages[tracking_number] = package
+            except Exception as err:
+                error_count += 1
+                error_msg = f"Error updating {tracking_number}: {str(err)}"
+                
+                # Check if this is a retryable error
+                if self._is_retryable_error(err):
+                    retryable_error_count += 1
+                    _LOGGER.warning(
+                        "Transient error updating %s (will retry): %s",
+                        tracking_number,
+                        err
+                    )
+                else:
                     _LOGGER.error(error_msg)
-                    self._last_error = error_msg
-                    # Continue with other packages
-                    continue
+                
+                self._last_error = error_msg
+                # Continue with other packages
+                continue
 
-            # Update last message
-            if error_count == 0:
-                self._last_message = f"Successfully updated {len(packages)} packages"
-                self._last_error = None
-            elif len(packages) > 0:
-                self._last_message = f"Updated {len(packages)} packages, {error_count} errors"
-            else:
-                self._last_message = f"Failed to update packages: {error_count} errors"
-            
-            # Trigger update listeners to update logging sensor
+        # Update last message
+        if error_count == 0:
+            self._last_message = f"Successfully updated {len(packages)} packages"
+            self._last_error = None
+        elif len(packages) > 0:
+            self._last_message = f"Updated {len(packages)} packages, {error_count} errors"
+        elif retryable_error_count == error_count:
+            # All errors are retryable - don't raise UpdateFailed, let coordinator retry
+            self._last_message = f"Temporary network issues: {error_count} packages failed (will retry)"
+            # Return empty dict but don't raise - coordinator will retry
             self.async_update_listeners()
-
             return packages
-        except Exception as err:
-            error_msg = f"Error communicating with API: {err}"
+        else:
+            # Some non-retryable errors occurred
+            self._last_message = f"Failed to update packages: {error_count} errors"
+        
+        # Trigger update listeners to update logging sensor
+        self.async_update_listeners()
+
+        # Only raise UpdateFailed if we have non-retryable errors and no successful updates
+        if len(packages) == 0 and retryable_error_count < error_count:
+            error_msg = f"Failed to update packages: {error_count} errors"
             self._last_error = error_msg
-            raise UpdateFailed(error_msg) from err
+            raise UpdateFailed(error_msg)
+        
+        return packages
 
     async def async_add_tracking(
         self, tracking_number: str, custom_name: str | None = None

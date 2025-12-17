@@ -115,7 +115,23 @@ async def async_setup_entry(
 
     # Refresh data on startup if we have tracking numbers
     if tracked_numbers:
-        await coordinator.async_config_entry_first_refresh()
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except Exception as err:
+            # Don't fail setup if initial refresh fails (e.g., DNS not ready after reboot)
+            # The coordinator will retry automatically
+            error_str = str(err).lower()
+            if any(keyword in error_str for keyword in ['timeout', 'dns', 'connection', 'network']):
+                _LOGGER.warning(
+                    "Initial refresh failed due to network issue (likely DNS not ready after reboot): %s. "
+                    "Sensors have been created and will retry automatically.",
+                    err
+                )
+            else:
+                _LOGGER.error(
+                    "Initial refresh failed: %s. Sensors have been created and will retry automatically.",
+                    err
+                )
     else:
         # No tracking numbers yet - entities will be created when tracking is added via service
         _LOGGER.info("No tracking numbers configured yet. Use ship24.add_tracking service to add packages.")

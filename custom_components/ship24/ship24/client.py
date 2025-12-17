@@ -1,5 +1,6 @@
 """Ship24 API client - Direct HTTP communication with Ship24 API."""
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +15,11 @@ from ..const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_DELAY_BASE = 2  # Base delay in seconds for exponential backoff
+REQUEST_TIMEOUT = 30  # Request timeout in seconds
 
 
 class Ship24Client:
@@ -33,6 +39,31 @@ class Ship24Client:
             "Content-Type": "application/json",
         }
         self._base_url = SHIP24_API_BASE_URL
+        # Create timeout configuration
+        self._timeout = aiohttp.ClientTimeout(
+            total=REQUEST_TIMEOUT,
+            connect=10,  # Connection timeout (including DNS)
+            sock_read=20  # Socket read timeout
+        )
+
+    def _is_retryable_error(self, err: Exception) -> bool:
+        """Check if an error is retryable (transient network error).
+        
+        Args:
+            err: The exception to check
+            
+        Returns:
+            True if the error is retryable, False otherwise
+        """
+        # DNS/timeout errors are retryable
+        if isinstance(err, (aiohttp.ClientConnectorError, aiohttp.ServerTimeoutError, asyncio.TimeoutError)):
+            return True
+        # Connection errors are retryable
+        if isinstance(err, aiohttp.ClientError):
+            error_str = str(err).lower()
+            if any(keyword in error_str for keyword in ['timeout', 'dns', 'connection', 'network', 'resolve']):
+                return True
+        return False
 
     async def _request(
         self,
@@ -41,7 +72,7 @@ class Ship24Client:
         data: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Make HTTP request to Ship24 API.
+        """Make HTTP request to Ship24 API with retry logic.
 
         Args:
             method: HTTP method (GET, POST, DELETE, etc.)
@@ -53,23 +84,60 @@ class Ship24Client:
             Response JSON data
 
         Raises:
-            aiohttp.ClientError: On HTTP errors
+            aiohttp.ClientError: On HTTP errors after retries exhausted
         """
         url = f"{self._base_url}{endpoint}"
+        # Use provided session or create a temporary one
+        use_temporary_session = self._session is None
         session = self._session or aiohttp.ClientSession()
 
         try:
-            async with session.request(
-                method, url, headers=self._headers, json=data, params=params
-            ) as response:
-                response.raise_for_status()
-                return await response.json()
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Ship24 API request failed: %s", err)
-            raise
+            last_error = None
+            for attempt in range(MAX_RETRIES):
+                try:
+                    async with session.request(
+                        method,
+                        url,
+                        headers=self._headers,
+                        json=data,
+                        params=params,
+                        timeout=self._timeout,
+                    ) as response:
+                        response.raise_for_status()
+                        result = await response.json()
+                        # Success - return immediately
+                        return result
+                except aiohttp.ClientError as err:
+                    last_error = err
+                    if self._is_retryable_error(err) and attempt < MAX_RETRIES - 1:
+                        # Calculate exponential backoff delay
+                        delay = RETRY_DELAY_BASE * (2 ** attempt)
+                        _LOGGER.warning(
+                            "Ship24 API request failed (attempt %d/%d): %s. Retrying in %d seconds...",
+                            attempt + 1,
+                            MAX_RETRIES,
+                            err,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # Non-retryable error or max retries reached
+                        _LOGGER.error("Ship24 API request failed: %s", err)
+                        raise
+                except Exception as err:
+                    # Non-retryable errors (non-network errors)
+                    last_error = err
+                    _LOGGER.error("Ship24 API request failed with non-retryable error: %s", err)
+                    raise
         finally:
-            if not self._session:
+            # Only close session if we created it (not if it was provided)
+            if use_temporary_session:
                 await session.close()
+        
+        # Should never reach here, but just in case
+        if last_error:
+            raise last_error
 
     async def get_trackers_list(self) -> List[Dict[str, Any]]:
         """Get list of all trackers.

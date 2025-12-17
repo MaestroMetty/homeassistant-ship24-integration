@@ -67,8 +67,19 @@ class Ship24RefreshButton(CoordinatorEntity, ButtonEntity):
         """Handle the button press - refresh all tracking sensors."""
         _LOGGER.info("Refresh button pressed - updating all tracking sensors")
         
-        # Refresh coordinator data
-        await self.coordinator.async_request_refresh()
+        try:
+            # Refresh coordinator data
+            await self.coordinator.async_request_refresh()
+        except Exception as err:
+            error_str = str(err).lower()
+            if any(keyword in error_str for keyword in ['timeout', 'dns', 'connection', 'network']):
+                _LOGGER.warning(
+                    "Refresh failed due to network issue: %s. Will retry automatically.",
+                    err
+                )
+            else:
+                _LOGGER.error("Refresh failed: %s", err)
+            # Continue to check for missing sensors even if refresh failed
         
         # Check for missing sensors and create them if callback is available
         if self._async_add_sensor:
@@ -87,8 +98,12 @@ class Ship24RefreshButton(CoordinatorEntity, ButtonEntity):
                     self._async_add_sensor([sensor])
         
         tracked_count = len(self.coordinator.get_tracking_numbers())
-        self.coordinator._last_message = f"Refreshed {tracked_count} tracking sensor{'s' if tracked_count != 1 else ''}"
-        self.coordinator._last_error = None
+        if self.coordinator._last_error:
+            # Keep the error message from coordinator
+            pass
+        else:
+            self.coordinator._last_message = f"Refreshed {tracked_count} tracking sensor{'s' if tracked_count != 1 else ''}"
+            self.coordinator._last_error = None
         
         # Trigger coordinator update listeners to update logging sensor
         self.coordinator.async_update_listeners()
