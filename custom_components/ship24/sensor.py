@@ -61,9 +61,15 @@ async def async_setup_entry(
         async_add_entities([sensor])
 
     # Add sensors for existing packages
-    await coordinator.async_config_entry_first_refresh()
-    for tracking_number in coordinator.get_tracking_numbers():
-        async_add_sensor(tracking_number)
+    tracking_numbers = coordinator.get_tracking_numbers()
+    if tracking_numbers:
+        # Only refresh if we have tracking numbers
+        await coordinator.async_config_entry_first_refresh()
+        for tracking_number in tracking_numbers:
+            async_add_sensor(tracking_number)
+    else:
+        # No tracking numbers yet - entities will be created when tracking is added via service
+        _LOGGER.info("No tracking numbers configured yet. Use ship24.add_tracking service to add packages.")
 
 
 class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
