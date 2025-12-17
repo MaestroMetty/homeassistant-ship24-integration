@@ -37,6 +37,9 @@ from .ship24.client import Ship24Client
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
+# Config schema - this integration only uses config flow
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Ship24 component."""
