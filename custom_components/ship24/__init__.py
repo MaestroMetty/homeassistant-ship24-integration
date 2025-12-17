@@ -3,6 +3,8 @@
 import logging
 from typing import Any
 
+from aiohttp import web
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -133,7 +135,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_handle_webhook(
     hass: HomeAssistant, webhook_id: str, request
-) -> None:
+) -> web.Response:
     """Handle incoming webhook from Ship24."""
     _LOGGER.debug("Received webhook: %s", webhook_id)
 
@@ -146,7 +148,7 @@ async def async_handle_webhook(
 
     if not entry:
         _LOGGER.warning("No config entry found for webhook: %s", webhook_id)
-        return
+        return web.Response(status=404, text="Webhook not found")
 
     # Get coordinator and API
     domain_data = hass.data[DOMAIN].get(entry.entry_id, {})
@@ -155,14 +157,14 @@ async def async_handle_webhook(
 
     if not coordinator or not api:
         _LOGGER.error("Coordinator or API not found for webhook")
-        return
+        return web.Response(status=500, text="Internal server error")
 
     # Parse webhook payload
     try:
         payload = await request.json()
     except Exception as err:
         _LOGGER.error("Failed to parse webhook payload: %s", err)
-        return
+        return web.Response(status=400, text="Invalid payload")
 
     # Process webhook via App Layer
     package = await api.process_webhook_payload(payload)
@@ -170,6 +172,8 @@ async def async_handle_webhook(
         _LOGGER.info("Webhook update received for: %s", package.tracking_number)
         # Trigger coordinator update
         await coordinator.async_request_refresh()
+        return web.Response(status=200, text="OK")
     else:
         _LOGGER.warning("Failed to process webhook payload")
+        return web.Response(status=200, text="OK")  # Return OK even if processing failed to avoid retries
 

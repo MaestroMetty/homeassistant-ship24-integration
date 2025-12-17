@@ -43,6 +43,7 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+launch_homeassistant.bat
 
 # HACS
 .hacs.json
