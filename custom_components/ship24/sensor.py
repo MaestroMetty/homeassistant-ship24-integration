@@ -90,6 +90,14 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
+        if self.coordinator.data is None:
+            # Coordinator data not yet loaded
+            return DeviceInfo(
+                identifiers={(DOMAIN, self._tracking_number)},
+                name=self._tracking_number,
+                manufacturer="Ship24",
+            )
+        
         package = self.coordinator.data.get(self._tracking_number)
         carrier = package.carrier if package else "Unknown Carrier"
 
@@ -103,6 +111,8 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         """Return the state of the sensor."""
+        if self.coordinator.data is None:
+            return "Unknown"
         package = self.coordinator.data.get(self._tracking_number)
         if package:
             return package.status_text or package.status
@@ -111,6 +121,8 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
     @property
     def icon(self) -> str:
         """Return the icon for the sensor."""
+        if self.coordinator.data is None:
+            return "mdi:package-variant"
         package = self.coordinator.data.get(self._tracking_number)
         if not package:
             return "mdi:package-variant"
@@ -128,6 +140,8 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
+        if self.coordinator.data is None:
+            return {}
         package = self.coordinator.data.get(self._tracking_number)
         if not package:
             return {}
