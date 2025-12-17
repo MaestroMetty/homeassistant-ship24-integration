@@ -84,6 +84,27 @@ async def async_setup_entry(
     # This ensures sensors are always created during setup/reload
     tracked_numbers = coordinator.get_tracking_numbers()
     
+    # Refresh data FIRST if we have tracking numbers (before creating sensors)
+    # This ensures coordinator.data is available when sensors are created
+    if tracked_numbers:
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except Exception as err:
+            # Don't fail setup if initial refresh fails (e.g., DNS not ready after reboot)
+            # The coordinator will retry automatically
+            error_str = str(err).lower()
+            if any(keyword in error_str for keyword in ['timeout', 'dns', 'connection', 'network']):
+                _LOGGER.warning(
+                    "Initial refresh failed due to network issue (likely DNS not ready after reboot): %s. "
+                    "Sensors will be created and will retry automatically.",
+                    err
+                )
+            else:
+                _LOGGER.error(
+                    "Initial refresh failed: %s. Sensors will be created and will retry automatically.",
+                    err
+                )
+    
     if tracked_numbers:
         _LOGGER.info("Creating sensors for %d tracked packages: %s", len(tracked_numbers), tracked_numbers)
         # Create sensors for all tracked numbers
@@ -91,6 +112,9 @@ async def async_setup_entry(
         for tracking_number in tracked_numbers:
             sensors_to_add.append(Ship24PackageSensor(coordinator, tracking_number))
         async_add_entities(sensors_to_add)
+    else:
+        # No tracking numbers yet - entities will be created when tracking is added via service
+        _LOGGER.info("No tracking numbers configured yet. Use ship24.add_tracking service to add packages.")
     
     # Check for orphaned sensors (entities in registry but not in tracked list)
     # This handles cleanup of manually removed tracking numbers
@@ -111,29 +135,6 @@ async def async_setup_entry(
         _LOGGER.info("Found %d orphaned sensors, removing them: %s", len(orphaned_sensors), orphaned_sensors)
         for tracking_number in orphaned_sensors:
             async_remove_sensor(tracking_number)
-
-    # Refresh data on startup if we have tracking numbers
-    if tracked_numbers:
-        try:
-            await coordinator.async_config_entry_first_refresh()
-        except Exception as err:
-            # Don't fail setup if initial refresh fails (e.g., DNS not ready after reboot)
-            # The coordinator will retry automatically
-            error_str = str(err).lower()
-            if any(keyword in error_str for keyword in ['timeout', 'dns', 'connection', 'network']):
-                _LOGGER.warning(
-                    "Initial refresh failed due to network issue (likely DNS not ready after reboot): %s. "
-                    "Sensors have been created and will retry automatically.",
-                    err
-                )
-            else:
-                _LOGGER.error(
-                    "Initial refresh failed: %s. Sensors have been created and will retry automatically.",
-                    err
-                )
-    else:
-        # No tracking numbers yet - entities will be created when tracking is added via service
-        _LOGGER.info("No tracking numbers configured yet. Use ship24.add_tracking service to add packages.")
 
 
 class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
@@ -162,14 +163,24 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
         )
 
     @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        # Entity is available if coordinator has data and this package is in it
+        return (
+            self.coordinator.last_update_success
+            and self.coordinator.data is not None
+            and self._tracking_number in self.coordinator.data
+        )
+
+    @property
     def native_value(self) -> str:
         """Return the state of the sensor."""
-        if self.coordinator.data is None:
-            return "Unknown"
+        if not self.available:
+            return None  # Return None when unavailable (Home Assistant will show "unavailable")
         package = self.coordinator.data.get(self._tracking_number)
         if package:
             return package.status_text or package.status
-        return "Unknown"
+        return None
 
     @property
     def icon(self) -> str:
@@ -234,6 +245,14 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
         # Ensure name is always set to tracking number
         self._attr_name = self._tracking_number
         self.async_write_ha_state()
+    
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass, write state immediately if data is available."""
+        await super().async_added_to_hass()
+        # Write state immediately if coordinator already has data
+        # This ensures sensors show correct state after reload
+        if self.coordinator.data is not None:
+            self.async_write_ha_state()
 
 
 class Ship24LoggingSensor(CoordinatorEntity, SensorEntity):
