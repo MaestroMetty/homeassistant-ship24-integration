@@ -47,3 +47,6 @@ htmlcov/
 # HACS
 .hacs.json
 
+# Logo (if you want to keep it out of git, but typically logos should be committed)
+# logo.png
+

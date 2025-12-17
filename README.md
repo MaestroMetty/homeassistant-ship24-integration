@@ -18,20 +18,41 @@ A Home Assistant integration for tracking packages using the Ship24 API. This in
 
 ## Installation
 
-### HACS (Not Yet)
+### HACS (Recommended)
 
 1. Open HACS in Home Assistant
 2. Go to Integrations
 3. Click the three dots in the top right
 4. Select "Custom repositories"
-5. Add this repository URL
-6. Click "Install"
+5. Add this repository URL: `https://github.com/maestrometty/homeassistant-ship24-integration`
+6. Select category: **Integration**
+7. Click "Install"
+
+#### Release Channels
+
+HACS supports multiple release channels for this integration:
+
+- **Stable** (default): Latest stable release - recommended for production use
+- **Beta**: Pre-release versions with new features - may contain bugs  
+- **Test**: Development versions - for testing only, may be unstable
+- **Custom Version**: Install a specific version by tag (e.g., `v1.0.0`)
+
+To change the release channel in HACS:
+1. Go to HACS → Integrations
+2. Find "Ship24 Package Tracking"
+3. Click the three dots menu
+4. Select "Redownload" or "Reinstall"
+5. Choose your preferred release channel (stable/beta/test) or enter a custom version tag
+
+See [RELEASES.md](RELEASES.md) for information about the release process.
 
 ### Manual Installation
 
-1. Copy the `custom_components/ship24` folder to your Home Assistant `custom_components` directory
-2. Restart Home Assistant
-3. Add the integration via Settings → Devices & Services → Add Integration
+1. Download the latest release from [Releases](https://github.com/maestrometty/homeassistant-ship24-integration/releases)
+2. Extract the `custom_components/ship24` folder
+3. Copy it to your Home Assistant `custom_components` directory
+4. Restart Home Assistant
+5. Add the integration via Settings → Devices & Services → Add Integration
 
 ## Configuration
 
@@ -93,6 +114,15 @@ Each package sensor includes the following attributes:
 ## Support
 
 For issues, feature requests, or questions, please open an issue on [GitHub](https://github.com/maestrometty/homeassistant-ship24-integration/issues).
+
+## Versioning
+
+This integration uses [Semantic Versioning](https://semver.org/):
+- **MAJOR** version for incompatible API changes
+- **MINOR** version for new functionality in a backward compatible manner
+- **PATCH** version for backward compatible bug fixes
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## License
 

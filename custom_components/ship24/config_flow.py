@@ -6,13 +6,11 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import CONF_API_KEY, CONF_WEBHOOK_ID, DOMAIN
-from .ship24.adapter import Ship24Adapter
-from .ship24.client import Ship24Client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,10 +23,15 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 async def validate_api_key(hass: HomeAssistant, api_key: str) -> None:
     """Validate the API key by testing connection."""
-    client = Ship24Client(api_key)
-    is_valid = await client.test_connection()
-    if not is_valid:
-        raise InvalidApiKey
+    # Import here to avoid circular imports
+    from .ship24.client import Ship24Client
+    import aiohttp
+    
+    async with aiohttp.ClientSession() as session:
+        client = Ship24Client(api_key, session)
+        is_valid = await client.test_connection()
+        if not is_valid:
+            raise InvalidApiKey
 
 
 class InvalidApiKey(HomeAssistantError):
@@ -75,35 +78,4 @@ class Ship24ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    @staticmethod
-    @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
-        """Create the options flow."""
-        return Ship24OptionsFlowHandler(config_entry)
-
-
-class Ship24OptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options flow for Ship24."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    # Add any options here in the future
-                }
-            ),
-        )
 
