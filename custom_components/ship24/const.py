@@ -2,6 +2,8 @@
 
 DOMAIN = "ship24"
 INTEGRATION_NAME = "Ship24 Package Tracking"
+DEVICE_NAME = "Ship24Tracking"
+DEVICE_IDENTIFIER = (DOMAIN, "tracking_device")
 
 # Ship24 API Configuration
 SHIP24_API_BASE_URL = "https://api.ship24.com/public/v1"

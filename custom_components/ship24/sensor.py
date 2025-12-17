@@ -24,6 +24,8 @@ from .const import (
     ATTR_STATUS_TEXT,
     ATTR_TRACKER_ID,
     ATTR_TRACKING_NUMBER,
+    DEVICE_IDENTIFIER,
+    DEVICE_NAME,
     DOMAIN,
     STATUS_DELIVERED,
     STATUS_EXCEPTION,
@@ -78,13 +80,41 @@ async def async_setup_entry(
     # Store remove callback
     coordinator._async_remove_entity = async_remove_sensor
 
-    # Add sensors for existing packages and refresh data on startup
-    tracking_numbers = coordinator.get_tracking_numbers()
-    if tracking_numbers:
-        # Create sensors first
-        for tracking_number in tracking_numbers:
+    # Create logging sensor (always created)
+    logging_sensor = Ship24LoggingSensor(coordinator)
+    async_add_entities([logging_sensor])
+
+    # Check alignment between tracked list and existing sensors on startup
+    entity_registry = er.async_get(hass)
+    tracked_numbers = coordinator.get_tracking_numbers()
+    
+    # Get all existing sensors for this device
+    existing_entity_ids = []
+    for entity_entry in entity_registry.entities.values():
+        if entity_entry.platform == DOMAIN and entity_entry.domain == "sensor":
+            # Extract tracking number from unique_id (format: ship24_{tracking_number})
+            if entity_entry.unique_id.startswith(f"{DOMAIN}_"):
+                tracking_num = entity_entry.unique_id.replace(f"{DOMAIN}_", "", 1)
+                # Skip logging sensor
+                if tracking_num != "logging":
+                    existing_entity_ids.append(tracking_num)
+    
+    # Find missing sensors (in tracked list but no entity)
+    missing_sensors = tracked_numbers - set(existing_entity_ids)
+    if missing_sensors:
+        _LOGGER.info("Found %d missing sensors on startup, creating them: %s", len(missing_sensors), missing_sensors)
+        for tracking_number in missing_sensors:
             async_add_sensor(tracking_number)
-        # Then refresh data (this will update all entities)
+    
+    # Find orphaned sensors (entity exists but not in tracked list)
+    orphaned_sensors = set(existing_entity_ids) - tracked_numbers
+    if orphaned_sensors:
+        _LOGGER.info("Found %d orphaned sensors on startup, removing them: %s", len(orphaned_sensors), orphaned_sensors)
+        for tracking_number in orphaned_sensors:
+            async_remove_sensor(tracking_number)
+
+    # Refresh data on startup if we have tracking numbers
+    if tracked_numbers:
         await coordinator.async_config_entry_first_refresh()
     else:
         # No tracking numbers yet - entities will be created when tracking is added via service
@@ -108,23 +138,12 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device information."""
-        if self.coordinator.data is None:
-            # Coordinator data not yet loaded
-            return DeviceInfo(
-                identifiers={(DOMAIN, self._tracking_number)},
-                name=self._tracking_number,
-                manufacturer="Ship24",
-            )
-        
-        package = self.coordinator.data.get(self._tracking_number)
-        carrier = package.carrier if package else "Unknown Carrier"
-
+        """Return device information - all sensors share the same device."""
         return DeviceInfo(
-            identifiers={(DOMAIN, self._tracking_number)},
-            name=package.custom_name or self._tracking_number if package else self._tracking_number,
+            identifiers={DEVICE_IDENTIFIER},
+            name=DEVICE_NAME,
             manufacturer="Ship24",
-            model=carrier,
+            model="Package Tracking",
         )
 
     @property
@@ -202,4 +221,49 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
             # Update name if custom name is set
             self._attr_name = package.custom_name or f"Package {self._tracking_number[:8]}"
         self.async_write_ha_state()
+
+
+class Ship24LoggingSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for displaying last Ship24 message or error."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = None
+    _attr_unique_id = f"{DOMAIN}_logging"
+    _attr_name = "Last Message"
+
+    def __init__(self, coordinator: Ship24DataUpdateCoordinator) -> None:
+        """Initialize the logging sensor."""
+        super().__init__(coordinator)
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={DEVICE_IDENTIFIER},
+            name=DEVICE_NAME,
+            manufacturer="Ship24",
+            model="Package Tracking",
+        )
+
+    @property
+    def native_value(self) -> str:
+        """Return the last message or error."""
+        if self.coordinator._last_error:
+            return f"Error: {self.coordinator._last_error}"
+        if self.coordinator._last_message:
+            return self.coordinator._last_message
+        return "No messages"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon for the sensor."""
+        return "mdi:message-text" if not self.coordinator._last_error else "mdi:alert-circle"
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        # Update when coordinator updates (to reflect new messages/errors)
+        self.async_write_ha_state()
+
+
 

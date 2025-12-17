@@ -30,6 +30,8 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
         self.hass = hass
         self.entry = entry
         self._tracking_numbers: set[str] = set()
+        self._last_error: str | None = None
+        self._last_message: str | None = None
         
         # Load tracking numbers from config entry
         saved_tracking_numbers = entry.data.get(CONF_TRACKING_NUMBERS, [])
@@ -63,21 +65,37 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from Ship24 API via App Layer."""
         try:
             packages = {}
+            error_count = 0
             for tracking_number in list(self._tracking_numbers):
                 try:
                     package = await self.api.update_package(tracking_number)
                     if package:
                         packages[tracking_number] = package
                 except Exception as err:
-                    _LOGGER.error(
-                        "Error updating package %s: %s", tracking_number, err
-                    )
+                    error_count += 1
+                    error_msg = f"Error updating {tracking_number}: {str(err)}"
+                    _LOGGER.error(error_msg)
+                    self._last_error = error_msg
                     # Continue with other packages
                     continue
 
+            # Update last message
+            if error_count == 0:
+                self._last_message = f"Successfully updated {len(packages)} packages"
+                self._last_error = None
+            elif len(packages) > 0:
+                self._last_message = f"Updated {len(packages)} packages, {error_count} errors"
+            else:
+                self._last_message = f"Failed to update packages: {error_count} errors"
+            
+            # Trigger update listeners to update logging sensor
+            self.async_update_listeners()
+
             return packages
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
+            error_msg = f"Error communicating with API: {err}"
+            self._last_error = error_msg
+            raise UpdateFailed(error_msg) from err
 
     async def async_add_tracking(
         self, tracking_number: str, custom_name: str | None = None
@@ -101,10 +119,18 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
                     from .sensor import Ship24PackageSensor
                     sensor = Ship24PackageSensor(self, tracking_number)
                     self._async_add_entities([sensor])
+                
+                self._last_message = f"Added tracking: {tracking_number}"
+                self._last_error = None
+                self.async_update_listeners()  # Update logging sensor
+                
                 await self.async_request_refresh()
                 return True
         except Exception as err:
-            _LOGGER.error("Error adding tracking %s: %s", tracking_number, err)
+            error_msg = f"Error adding tracking {tracking_number}: {err}"
+            _LOGGER.error(error_msg)
+            self._last_error = error_msg
+            self.async_update_listeners()  # Update logging sensor
         return False
 
     async def async_remove_tracking(self, tracking_number: str) -> bool:
@@ -135,6 +161,10 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.info("Removed entity for tracking number %s", tracking_number)
                 except Exception as err:
                     _LOGGER.error("Failed to remove entity for %s: %s", tracking_number, err)
+            
+            self._last_message = f"Removed tracking: {tracking_number}"
+            self._last_error = None
+            self.async_update_listeners()  # Update logging sensor
             
             # Don't refresh after removal - the entity is gone
             return True

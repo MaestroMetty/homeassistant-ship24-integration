@@ -35,7 +35,7 @@ from .coordinator import Ship24DataUpdateCoordinator
 from .ship24.adapter import Ship24Adapter, Ship24Backend
 from .ship24.client import Ship24Client
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
