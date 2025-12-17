@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..app.models import PackageData, TrackingEvent
 from ..const import (
@@ -13,6 +13,9 @@ from ..const import (
     STATUS_PENDING,
     STATUS_UNKNOWN,
 )
+
+if TYPE_CHECKING:
+    from .client import Ship24Client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -276,7 +279,7 @@ class Ship24Adapter:
 class Ship24Backend:
     """Backend implementation that App Layer uses."""
 
-    def __init__(self, client: Ship24Client, adapter: Ship24Adapter):
+    def __init__(self, client: "Ship24Client", adapter: Ship24Adapter):
         """Initialize backend with client and adapter."""
         self._client = client
         self._adapter = adapter
