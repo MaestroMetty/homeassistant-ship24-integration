@@ -183,19 +183,27 @@ async def async_handle_webhook(
     This handler receives POST requests from Ship24 when package tracking updates occur.
     The webhook_id matches the ID registered during setup.
     """
+    _LOGGER.info("Webhook handler called with ID: %s", webhook_id)
     try:
         _LOGGER.debug("Received webhook: %s", webhook_id)
 
         # Find the config entry for this webhook
         entry = None
+        registered_ids = []
         for config_entry in hass.config_entries.async_entries(DOMAIN):
             stored_webhook_id = config_entry.data.get(CONF_WEBHOOK_ID)
+            if stored_webhook_id:
+                registered_ids.append(stored_webhook_id)
             if stored_webhook_id == webhook_id:
                 entry = config_entry
+                _LOGGER.info("Found matching config entry for webhook ID: %s", webhook_id)
                 break
 
+        if registered_ids:
+            _LOGGER.debug("Registered webhook IDs: %s", registered_ids)
+
         if not entry:
-            _LOGGER.warning("No config entry found for webhook: %s", webhook_id)
+            _LOGGER.warning("No config entry found for webhook ID: %s. Registered IDs: %s", webhook_id, registered_ids)
             return web.Response(status=404, text="Webhook not found")
 
         # Get coordinator and API
