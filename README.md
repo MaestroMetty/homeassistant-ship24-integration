@@ -18,7 +18,7 @@ A Home Assistant integration for tracking packages using the Ship24 API. This in
 
 ## Installation
 
-### HACS (Recommended)
+### HACS (Not Yet)
 
 1. Open HACS in Home Assistant
 2. Go to Integrations
@@ -92,7 +92,7 @@ Each package sensor includes the following attributes:
 
 ## Support
 
-For issues, feature requests, or questions, please open an issue on [GitHub](https://github.com/yourusername/homeassistant-ship24-integration/issues).
+For issues, feature requests, or questions, please open an issue on [GitHub](https://github.com/maestrometty/homeassistant-ship24-integration/issues).
 
 ## License
 
