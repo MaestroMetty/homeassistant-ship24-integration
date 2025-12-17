@@ -101,6 +101,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     webhook_id,
                     webhook_id
                 )
+        except ValueError as err:
+            # ValueError is raised when webhook is already registered
+            if "already defined" in str(err).lower() or "already registered" in str(err).lower():
+                _LOGGER.debug("Webhook %s is already registered, skipping", webhook_id)
+            else:
+                _LOGGER.error("Failed to register webhook handler: %s", err)
         except Exception as err:
             _LOGGER.error("Failed to register webhook handler: %s", err)
     elif webhook_id and not WEBHOOK_AVAILABLE:

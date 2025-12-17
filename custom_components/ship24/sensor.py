@@ -134,7 +134,7 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._tracking_number = tracking_number
         self._attr_unique_id = f"{DOMAIN}_{tracking_number}"
-        self._attr_name = None  # Will be set from package data
+        self._attr_name = tracking_number
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -216,10 +216,8 @@ class Ship24PackageSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        package = self.coordinator.data.get(self._tracking_number)
-        if package:
-            # Update name if custom name is set
-            self._attr_name = package.custom_name or f"Package {self._tracking_number[:8]}"
+        # Ensure name is always set to tracking number
+        self._attr_name = self._tracking_number
         self.async_write_ha_state()
 
 
