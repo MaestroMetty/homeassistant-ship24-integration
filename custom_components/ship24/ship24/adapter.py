@@ -329,14 +329,6 @@ class Ship24Backend:
         """Delete tracker."""
         return await self._client.delete_tracker(tracking_number)
 
-    async def register_webhook(self, webhook_url: str) -> Optional[str]:
-        """Register webhook."""
-        return await self._client.register_webhook(webhook_url)
-
-    async def delete_webhook(self, webhook_id: str) -> bool:
-        """Delete webhook."""
-        return await self._client.delete_webhook(webhook_id)
-
     async def process_webhook(self, payload: dict) -> Optional[PackageData]:
         """Process webhook payload."""
         return await Ship24Adapter.process_webhook(payload)

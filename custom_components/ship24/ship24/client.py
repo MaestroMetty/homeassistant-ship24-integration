@@ -11,7 +11,6 @@ from ..const import (
     SHIP24_API_TRACKERS_ENDPOINT,
     SHIP24_API_TRACKERS_TRACK_ENDPOINT,
     SHIP24_API_TRACKERS_SEARCH_ENDPOINT,
-    SHIP24_API_WEBHOOKS_ENDPOINT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -233,39 +232,6 @@ class Ship24Client:
         """
         try:
             endpoint = f"{SHIP24_API_TRACKERS_ENDPOINT}/{tracking_number}"
-            await self._request("DELETE", endpoint)
-            return True
-        except Exception:
-            return False
-
-    async def register_webhook(self, webhook_url: str) -> Optional[str]:
-        """Register a webhook URL.
-
-        Args:
-            webhook_url: The webhook URL to register
-
-        Returns:
-            Webhook ID if successful, None otherwise
-        """
-        try:
-            data = {"url": webhook_url}
-            response = await self._request("POST", SHIP24_API_WEBHOOKS_ENDPOINT, data=data)
-            return response.get("data", {}).get("webhookId")
-        except Exception as err:
-            _LOGGER.error("Failed to register webhook: %s", err)
-            return None
-
-    async def delete_webhook(self, webhook_id: str) -> bool:
-        """Delete a webhook.
-
-        Args:
-            webhook_id: The webhook ID to delete
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            endpoint = f"{SHIP24_API_WEBHOOKS_ENDPOINT}/{webhook_id}"
             await self._request("DELETE", endpoint)
             return True
         except Exception:

@@ -107,28 +107,6 @@ class ParcelTrackingAPI:
             self._packages[tracking_number] = package_data
         return package_data
 
-    async def register_webhook(self, webhook_url: str) -> Optional[str]:
-        """Register a webhook URL for real-time updates.
-
-        Args:
-            webhook_url: The webhook URL to register
-
-        Returns:
-            Webhook ID if successful, None otherwise
-        """
-        return await self._backend.register_webhook(webhook_url)
-
-    async def delete_webhook(self, webhook_id: str) -> bool:
-        """Delete a webhook.
-
-        Args:
-            webhook_id: The webhook ID to delete
-
-        Returns:
-            True if deleted, False otherwise
-        """
-        return await self._backend.delete_webhook(webhook_id)
-
     async def process_webhook_payload(self, payload: dict) -> Optional[PackageData]:
         """Process incoming webhook payload.
 
