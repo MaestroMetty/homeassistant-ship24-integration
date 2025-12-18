@@ -104,21 +104,25 @@ class Ship24DataUpdateCoordinator(DataUpdateCoordinator):
                 # Continue with other packages
                 continue
 
-        # Update last message
+        # Update last message with full report
+        success_count = len(packages)
+        
         if error_count == 0:
-            self._last_message = f"Successfully updated {len(packages)} packages"
+            # All success
+            self._last_message = f"{success_count} success, 0 fails"
             self._last_error = None
-        elif len(packages) > 0:
-            self._last_message = f"Updated {len(packages)} packages, {error_count} errors"
+        elif success_count > 0:
+            # Partial success
+            self._last_message = f"{success_count} success, {error_count} fails"
         elif retryable_error_count == error_count:
             # All errors are retryable - don't raise UpdateFailed, let coordinator retry
-            self._last_message = f"Temporary network issues: {error_count} packages failed (will retry)"
+            self._last_message = f"0 success, {error_count} fails (will retry)"
             # Return empty dict but don't raise - coordinator will retry
             self.async_update_listeners()
             return packages
         else:
-            # Some non-retryable errors occurred
-            self._last_message = f"Failed to update packages: {error_count} errors"
+            # All non-retryable errors
+            self._last_message = f"0 success, {error_count} fails"
         
         # Trigger update listeners to update logging sensor
         self.async_update_listeners()

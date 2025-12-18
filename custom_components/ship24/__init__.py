@@ -82,11 +82,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             
             # Automatically register webhook URL with Ship24 API
             try:
-                from homeassistant.helpers import network
-                webhook_base_url = network.get_url(hass, prefer_external=True, allow_cloud=False)
-                if webhook_base_url:
-                    webhook_full_url = f"{webhook_base_url.rstrip('/')}/api/webhook/{webhook_id}"
-                    
+                webhook_url = await client.get_webhook_url(webhook_id)
+                if webhook_url:
                     # Check if URL appears to be internal (private IP ranges)
                     is_internal = False
                     if webhook_base_url.startswith("http://172.") or webhook_base_url.startswith("http://192.168.") or webhook_base_url.startswith("http://10.") or webhook_base_url.startswith("http://127.") or webhook_base_url.startswith("http://169.254."):

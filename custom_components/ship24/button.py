@@ -10,7 +10,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DEVICE_IDENTIFIER, DEVICE_NAME, DOMAIN
+from .const import DEVICE_IDENTIFIER, DEVICE_NAME, DOMAIN, CONF_WEBHOOK_ID
 from .coordinator import Ship24DataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,10 +29,72 @@ async def async_setup_entry(
     # Get the async_add_sensor callback from coordinator if available
     async_add_sensor = getattr(coordinator, "_async_add_entities", None)
 
-    # Create refresh button
-    refresh_button = Ship24RefreshButton(coordinator, async_add_sensor)
-    async_add_entities([refresh_button])
+    # Create buttons
+    buttons = [
+        Ship24RefreshButton(coordinator, async_add_sensor),
+        Ship24GetWebhookButton(coordinator),
+    ]
+    async_add_entities(buttons)
 
+
+class Ship24GetWebhookButton(CoordinatorEntity, ButtonEntity):
+    """Button to display the webhook URL in the logging sensor."""
+
+    _attr_has_entity_name = True
+    _attr_unique_id = f"{DOMAIN}_get_webhook"
+    _attr_name = "Get Webhook URL"
+
+    def __init__(self, coordinator: Ship24DataUpdateCoordinator) -> None:
+        """Initialize the get webhook button."""
+        super().__init__(coordinator)
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={DEVICE_IDENTIFIER},
+            name=DEVICE_NAME,
+            manufacturer="Ship24",
+            model="Package Tracking",
+        )
+
+    @property
+    def icon(self) -> str:
+        """Return the icon for the button."""
+        return "mdi:webhook"
+
+    async def async_press(self) -> None:
+        """Handle the button press - get the webhook URL."""
+        _LOGGER.info("Get webhook button pressed - updating the log sensor with the webhook data")
+        
+        # Get the webhook ID
+        webhook_id = self.coordinator.entry.data.get(CONF_WEBHOOK_ID)
+        
+        # Construct the full webhook URL (same logic as in __init__.py)
+        webhook_url = None
+        if webhook_id:
+            try:
+                from homeassistant.helpers import network
+                webhook_base_url = network.get_url(self.coordinator.hass, prefer_external=True, allow_cloud=False)
+                if webhook_base_url:
+                    webhook_url = f"{webhook_base_url.rstrip('/')}/api/webhook/{webhook_id}"
+                else:
+                    webhook_url = f"Webhook ID: {webhook_id} (No external URL configured)"
+            except Exception as err:
+                _LOGGER.error("Failed to construct webhook URL: %s", err)
+                webhook_url = f"Webhook ID: {webhook_id} (Error constructing URL)"
+        else:
+            webhook_url = "No webhook ID configured"
+        
+        # Update the log sensor with the webhook data
+        self.coordinator._last_message = f"Webhook URL: {webhook_url}"
+        self.coordinator._last_error = None
+        
+        # Trigger coordinator update listeners to update logging sensor
+        self.coordinator.async_update_listeners()
+        
+        self.async_write_ha_state()
+        
 
 class Ship24RefreshButton(CoordinatorEntity, ButtonEntity):
     """Button to refresh/update all tracking sensors."""
@@ -96,17 +158,8 @@ class Ship24RefreshButton(CoordinatorEntity, ButtonEntity):
                     from .sensor import Ship24PackageSensor
                     sensor = Ship24PackageSensor(self.coordinator, tracking_number)
                     self._async_add_sensor([sensor])
-        
-        tracked_count = len(self.coordinator.get_tracking_numbers())
-        if self.coordinator._last_error:
-            # Keep the error message from coordinator
-            pass
-        else:
-            self.coordinator._last_message = f"Refreshed {tracked_count} tracking sensor{'s' if tracked_count != 1 else ''}"
-            self.coordinator._last_error = None
-        
-        # Trigger coordinator update listeners to update logging sensor
-        self.coordinator.async_update_listeners()
-        
-        self.async_write_ha_state()
+
+        #note: The coordinator will update _last_message with refresh results
+        # via _async_update_data(), so we don't need to set it here
+        # The logging sensor will automatically show the update info
 
