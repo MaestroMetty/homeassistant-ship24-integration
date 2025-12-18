@@ -161,5 +161,5 @@ class Ship24RefreshButton(CoordinatorEntity, ButtonEntity):
 
         #note: The coordinator will update _last_message with refresh results
         # via _async_update_data(), so we don't need to set it here
-        # The logging sensor will automatically show the update info
+        # The logging sensor will automatically show the update info.
 
